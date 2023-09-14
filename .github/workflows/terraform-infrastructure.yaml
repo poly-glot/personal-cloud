@@ -1,0 +1,53 @@
+
+name: 01 - Deploy Core Infrastructure Changes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Infrastructure
+    runs-on: ubuntu-latest
+    env:
+      TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      TF_VAR_private_key: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      TF_VAR_region: ${{ secrets.OCI_CLI_REGION }}
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_CLI_TENANCY }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_CLI_USER }}
+      TF_VAR_ssh_public_key: ${{ secrets.JUNAID_SSH_PUBLIC_KEY }}
+      TF_VAR_project: junaid
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      working_directory: ./terraform/01-infrastructure/
+
+    defaults:
+      run:
+        working-directory: ${{env.working_directory}}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Terraform Setup
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.3
+
+      - name: Terraform fmt
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve -no-color
+
