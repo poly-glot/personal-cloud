@@ -83,3 +83,8 @@ kubectl label node NODE_ID_4 "kubernetes.io/hostname"="node4" --overwrite
 ```
 
 4. Copy the OCID of main node and store it as Repository Secret `OCI_MAIN_INSTANCE_OCID` in Github.
+
+docker pull nginx:latest
+docker tag "nginx:latest" "lhr.ocir.io/lrhvckxzwf3l/nginx:v2"
+docker push "lhr.ocir.io/lrhvckxzwf3l/nginx:v2"
+https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengpullingimagesfromocir.htm
