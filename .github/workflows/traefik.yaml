@@ -6,20 +6,40 @@ on:
 
 jobs:
   build:
-    name: Build Infrastructure
+    name: Setup Traefik
     runs-on: ubuntu-latest
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
 
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Deploy
-        uses: 'deliverybot/helm@v1'
+      - name: Configure Kubectl
+        uses: oracle-actions/configure-kubectl-oke@v1.3.2
+        id: test-configure-kubectl-oke-action
         with:
-          release: 'traefik'
-          namespace: 'kube-system'
-          chart: 'traefik/traefik'
-        value-files: ["./terraform/02-traefik/values.yaml"]
-        env:
-          KUBECONFIG_FILE: '${{ secrets.KUBECONFIG_CONTENT }}'
+          cluster: ${{ secrets.OCI_OKE_CLUSTER_OCID }}
 
+      - uses: azure/setup-helm@v3
+        with:
+          version: 'v3.9.0'
+          token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
+        id: install
+
+      - name: Run Helm to setup traefik
+        run: |
+          cd terraform/02-traefik
+          
+          helm repo add traefik https://traefik.github.io/charts
+          helm repo update
+          
+          helm upgrade --install traefik traefik/traefik \
+          --namespace kube-system --create-namespace -f values.yaml
+
+          kubectl apply -f http-to-https-redirect.yaml
+          
