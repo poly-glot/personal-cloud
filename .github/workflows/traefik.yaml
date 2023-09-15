@@ -1,0 +1,25 @@
+
+name: 02 - Setup Traefik
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Infrastructure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Deploy
+        uses: 'deliverybot/helm@v1'
+        with:
+          release: 'traefik'
+          namespace: 'kube-system'
+          chart: 'traefik/traefik'
+        value-files: ["./terraform/02-traefik/values.yaml"]
+        env:
+          KUBECONFIG_FILE: '${{ secrets.KUBECONFIG_CONTENT }}'
+
