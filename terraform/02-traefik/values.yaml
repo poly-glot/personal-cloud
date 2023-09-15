@@ -1,0 +1,33 @@
+service:
+  enabled: true
+  single: true
+  type: NodePort
+nodeSelector:
+  "kubernetes.io/hostname": "main"
+
+ports:
+  traefik:
+    port: 9000
+    expose: true
+    exposedPort: 9000
+    protocol: TCP
+  web:
+    port: 8000
+    expose: true
+    exposedPort: 80
+    nodePort: 32080
+    protocol: TCP
+  websecure:
+    port: 8443
+    expose: true
+    exposedPort: 443
+    protocol: TCP
+    nodePort: 32443
+
+certResolvers:
+  letsencrypt:
+    email: "me@junaid.guru"
+    tlsChallenge: true
+    httpChallenge:
+      entryPoint: "web"
+    storage: /data/acme.json
