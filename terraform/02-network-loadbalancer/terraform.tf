@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket                      = "terraform-backend"
-    key                         = "junaidcloud/terraform.tfstate"
+    key                         = "junaidcloud/nlb.tfstate"
     region                      = "uk-london-1"
     endpoint                    = "https://lrhvckxzwf3l.compat.objectstorage.uk-london-1.oraclecloud.com"
     skip_region_validation      = true
