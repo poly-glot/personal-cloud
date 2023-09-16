@@ -124,3 +124,20 @@ kubectl cp $(kubectl get pods --selector "app=nginx" --output=name | head -n 1 |
 ```shell
 kubectl cp ./index.html $(kubectl get pods --selector "app=nginx" --output=name | head -n 1 | awk -F/ '{print $2}'):/usr/share/nginx/html/index.html
 ```
+
+### View volume bounding
+```shell
+ kubectl get pods --all-namespaces -o=json | jq -c '.items[] | {name: .metadata.name, namespace: .metadata.namespace, claimName:.spec.volumes[] | select( has ("persistentVolumeClaim") ).persistentVolumeClaim.claimName }'
+```
+
+## Mysql Setup (manual)
+```shell
+cd mysql-database/
+kubectl create namespace database
+kubectl apply -f mysql.yaml --namespace database
+kubectl port-forward service/mysql-service 3306:3306 --namespace database
+
+CREATE DATABASE mydatabase;
+CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
+GRANT ALL PRIVILEGES ON mydatabase.* TO 'chatapp'@'%';
+```
