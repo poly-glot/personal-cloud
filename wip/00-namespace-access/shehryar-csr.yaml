@@ -1,0 +1,14 @@
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: shehryar-user
+spec:
+  groups:
+    - system:authenticated
+  request: <<requesthere>>
+  signerName: kubernetes.io/kube-apiserver-client
+  usages:
+    - digital signature
+    - key encipherment
+
+    - client auth
