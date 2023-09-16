@@ -1,5 +1,5 @@
 resource "oci_network_load_balancer_network_load_balancer" "nlb" {
-  compartment_id                 = var.compartment_id
+  compartment_id                 = var.compartment_ocid
   display_name                   = "${var.project}-nlb"
   subnet_id                      = data.oci_core_subnets.vcn_public_subnet.subnets[0].id
   is_private                     = false

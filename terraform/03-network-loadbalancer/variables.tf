@@ -3,7 +3,7 @@ variable "project" {
   description = "Project name"
 }
 
-variable "compartment_id" {
+variable "compartment_ocid" {
   type        = string
   description = "The compartment to create the resources in"
 }

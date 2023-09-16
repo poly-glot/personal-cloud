@@ -55,7 +55,7 @@ echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --p
 - Name key appropriately or leave it as it is.
 ```shell
 terraform/01-infrastructure/terraform.tf
-terraform/02-network-loadbalancer/terraform.tf
+terraform/03-network-loadbalancer/terraform.tf
 ```
 21. Push all changes, Visit Actions tab in your repository and manually run " 01 - Deploy Core Infrastructure Changes"
 
@@ -84,7 +84,7 @@ kubectl label node NODE_ID_4 "kubernetes.io/hostname"="node4" --overwrite
 
 4. Copy the OCID of main node and store it as Repository Secret `OCI_MAIN_INSTANCE_OCID` in Github.
 
-docker pull nginx:latest
-docker tag "nginx:latest" "lhr.ocir.io/lrhvckxzwf3l/nginx:v2"
-docker push "lhr.ocir.io/lrhvckxzwf3l/nginx:v2"
-https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengpullingimagesfromocir.htm
+### Setup Network Load Balancer
+1. Goto Repository -> Actions -> 03 - Deploy OCI Network Loadbalancer
+2. Run the action manually
+3. You can use public ip address in DNS setup
