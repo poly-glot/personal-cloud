@@ -88,3 +88,39 @@ kubectl label node NODE_ID_4 "kubernetes.io/hostname"="node4" --overwrite
 1. Goto Repository -> Actions -> 03 - Deploy OCI Network Loadbalancer
 2. Run the action manually
 3. You can use public ip address in DNS setup
+
+## Common Kubectl tasks
+
+### Find Pods by Label
+```shell
+kubectl get pods ---selector app=nginx --all-namespaces
+```
+
+### Setup Proxy / Port forward
+```shell
+kubectl port-forward service/traefik 32080:80
+kubectl port-forward deployment/nginx-deployment 32080:80
+kubectl port-forward service/traefik 9000:9000
+kubectl port-forward $(kubectl get pods --selector "app.kubernetes.io/name=traefik" --output=name) 9000:9000
+```
+
+### Bash access
+```shell
+kubectl exec --stdin --tty $(kubectl get pods --selector "app=nginx" --output=name) -- /bin/bash
+```
+
+### View Logs
+```shell
+kubectl logs $(kubectl get pods --selector "app.kubernetes.io/instance=traefik-kube-system" --output=name -n kube-system) -n kube-system -f
+kubectl logs  $(kubectl get pods --selector "app=nginx" --output=name) -f
+```
+
+### Copy file from container
+```shell
+kubectl cp $(kubectl get pods --selector "app=nginx" --output=name | head -n 1 | awk -F/ '{print $2}'):/usr/share/nginx/html/index.html ./index.html
+```
+
+### Copy file to container
+```shell
+kubectl cp ./index.html $(kubectl get pods --selector "app=nginx" --output=name | head -n 1 | awk -F/ '{print $2}'):/usr/share/nginx/html/index.html
+```
