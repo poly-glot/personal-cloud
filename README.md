@@ -34,22 +34,9 @@ OCI_CLI_REGION
 11. Generate token and store as `OCI_AUTH_TOKEN` in Repository secrets
 12. [Click here](https://docs.oracle.com/en-us/iaas/Content/GSG/Tasks/contactingsupport_topic-Finding_the_OCID_of_a_Compartment.htm) to find the OCID of a Compartment - ((Direct Link)[https://cloud.oracle.com/identity/compartments?region=uk-london-1])
 13. Store `OCI_COMPARTMENT_OCID` in Repository secrets
-14. Click on Profile icon in Oracle Cloud and visit "Tenancy: {{yourid}}" link
-15. Copy "Object storage namespace" and store as `OCI_TENANCY_NAMESPACE` in Repository secrets
-16. Find Region ID from [Availability Zones](https://docs.oracle.com/en-us/iaas/Content/Registry/Concepts/registryprerequisites.htm#regional-availability). For example UK South London id is "lhr" and store the following host as `DOCKER_HOST` in secrets
-```shell
-{region-id}.ocir.io
-```
-17. Store `DOCKER_USERNAME` as following, where `OCI_USERNME` is same as appeared in Oracle Cloud under Profile icon "oracleidentitycloudservice/{{email}}"
-```shell
-$OCI_TENANCY_NAMESPACE/$OCI_USERNME
-
-# To test docker credentials locally
-echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --password-stdin
-```
-18. Visit Oracle Cloud and search "Buckets" OR Click Burger Menu -> Storage -> Object Storage & Archive Storage -> Buckets
-19. Click "Create Bucket" and name it appropriately because it will save terraform states. I usually call them "terraform-backend"
-20. Update following files
+14. Visit Oracle Cloud and search "Buckets" OR Click Burger Menu -> Storage -> Object Storage & Archive Storage -> Buckets
+15. Click "Create Bucket" and name it appropriately because it will save terraform states. I usually call them "terraform-backend"
+16. Update following files
 - Replace bucket name
 - Replace endpoint, it is usually "https://$OCI_TENANCY_NAMESPACE.compat.objectstorage.$OCI_REGION.oraclecloud.com"
 - Name key appropriately or leave it as it is.
@@ -57,7 +44,11 @@ echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --p
 terraform/01-infrastructure/terraform.tf
 terraform/03-network-loadbalancer/terraform.tf
 ```
-21. Push all changes, Visit Actions tab in your repository and manually run " 01 - Deploy Core Infrastructure Changes"
+18. Click on Profile Icon and your username in Oracle Cloud Dashboard, click "Customer Secret Keys" in the Resources sidebar.
+19. Click "Generate Secret Key", name appropriately e.g. "Terraform Backend State"
+20. Copy secret key and store as `AWS_SECRET_ACCESS_KEY` in Repository secrets
+21. Copy access key against "Terraform Backend State" and store as `AWS_ACCESS_KEY_ID` in Repository secrets
+22. Push all changes, Visit Actions tab in your repository and manually run " 01 - Deploy Core Infrastructure Changes"
 
 ### Name nodes in the cluster
 1. Create kubeconfig file locally
@@ -83,6 +74,24 @@ kubectl label node NODE_ID_4 "kubernetes.io/hostname"="node4" --overwrite
 ```
 
 4. Copy the OCID of main node and store it as Repository Secret `OCI_MAIN_INSTANCE_OCID` in Github.
+
+### Setup Ingress Controller
+```shell
+cd terraform/02-traefik
+
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+
+helm upgrade --install traefik traefik/traefik \
+--namespace kube-system --create-namespace -f values.yaml
+
+kubectl apply -f http-to-https-redirect.yaml
+```
+
+### Setup ClusterSecrets
+```shell
+helm upgrade -i clustersecret-operator oci://ghcr.io/sap/clustersecret-operator-helm/clustersecret-operator
+```
 
 ### Setup Network Load Balancer
 1. Goto Repository -> Actions -> 03 - Deploy OCI Network Loadbalancer
@@ -140,4 +149,16 @@ kubectl port-forward service/mysql-service 3306:3306 --namespace database
 CREATE DATABASE mydatabase;
 CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
 GRANT ALL PRIVILEGES ON mydatabase.* TO 'chatapp'@'%';
+```
+
+## Access OCI Registry Locally
+1. Click on Profile icon in Oracle Cloud and visit "Tenancy: {{yourid}}" link
+2. Copy "Object storage namespace" and record as `OCI_TENANCY_NAMESPACE` 
+3. Find Region ID from [Availability Zones](https://docs.oracle.com/en-us/iaas/Content/Registry/Concepts/registryprerequisites.htm#regional-availability). For example UK South London id is "lhr" and store the following host as `DOCKER_HOST` in secrets
+```shell
+{region-id}.ocir.io
+```
+4. Store `DOCKER_USERNAME` as following, where `OCI_USERNME` is same as appeared in Oracle Cloud under Profile icon "{{OCI_TENANCY_NAMESPACE}}/oracleidentitycloudservice/{{email}}"
+```shell
+echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --password-stdin
 ```
