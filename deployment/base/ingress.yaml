@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: webapp
+spec:
+  rules:
+    - host: shehryar.local.junaid.guru
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: webapp
+                port:
+                  number: 80
