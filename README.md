@@ -149,6 +149,8 @@ kubectl port-forward service/mysql-service 3306:3306 --namespace database
 CREATE DATABASE mydatabase;
 CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
 GRANT ALL PRIVILEGES ON mydatabase.* TO 'chatapp'@'%';
+
+kubectl create secret generic database-secret --from-literal=DB_PASS=$(echo -n 'mypassword' | base64) --namespace projectnamespace
 ```
 
 ## Access OCI Registry Locally
@@ -160,5 +162,5 @@ GRANT ALL PRIVILEGES ON mydatabase.* TO 'chatapp'@'%';
 ```
 4. Store `DOCKER_USERNAME` as following, where `OCI_USERNME` is same as appeared in Oracle Cloud under Profile icon "{{OCI_TENANCY_NAMESPACE}}/oracleidentitycloudservice/{{email}}"
 ```shell
-echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --password-stdin
+echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --password-stdin 
 ```

@@ -8,9 +8,15 @@ spec:
     spec: # Pod spec
       containers:
         - name: webappcontainer
-          image: "shehryar:latest"
+          image: "webapp:latest"
           ports:
             - containerPort: 80
+          env:
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: database-secret
+                  key: DB_PASS
           envFrom:
             - configMapRef:
                 name: database-map
