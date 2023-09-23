@@ -110,7 +110,7 @@ kubectl get pods ---selector app=nginx --all-namespaces
 kubectl port-forward service/traefik 32080:80
 kubectl port-forward deployment/nginx-deployment 32080:80
 kubectl port-forward service/traefik 9000:9000
-kubectl port-forward $(kubectl get pods --selector "app.kubernetes.io/name=traefik" --output=name) 9000:9000
+kubectl port-forward $(kubectl get pods --selector "app.kubernetes.io/name=traefik" --output=name  -n kube-system)  -n kube-system 9000:9000
 ```
 
 ### Bash access
@@ -145,6 +145,11 @@ cd mysql-database/
 kubectl create namespace database
 kubectl apply -f mysql.yaml --namespace database
 kubectl port-forward service/mysql-service 3306:3306 --namespace database
+
+cd mysql-database/
+kubectl create namespace phpmyadmin
+# replace <<usernamehere>> and <<passwordhere>> in phpmyadmin.yaml
+kubectl apply -f phpmyadmin.yaml --namespace phpmyadmin
 
 CREATE DATABASE mydatabase;
 CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';

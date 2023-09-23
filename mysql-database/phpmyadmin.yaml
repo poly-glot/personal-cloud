@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpmyadmin-deployment
+  labels:
+    app: phpmyadmin
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin
+    spec:
+      containers:
+        - name: phpmyadmin
+          image: "phpmyadmin:latest"
+          ports:
+            - containerPort: 80
+          env:
+            - name: PMA_HOST
+              value: "mysql-service.database.svc.cluster.local"
+  selector:
+    matchLabels:
+      app: phpmyadmin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpmyadmin-service
+spec:
+  type: NodePort
+  selector:
+    app: phpmyadmin
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phpmyadmin-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    traefik.ingress.kubernetes.io/router.middlewares: "phpmyadmin-phpmyadmin-auth@kubernetescrd"
+spec:
+  tls:
+    - hosts:
+        - db.junaid.guru
+  rules:
+    - host: db.junaid.guru
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: phpmyadmin-service
+                port:
+                  number: 80
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: phpmyadmin-secret-auth
+type: kubernetes.io/basic-auth
+stringData:
+  username: "<<usernamehere>>"
+  password: "<<passwordhere>>"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: phpmyadmin-auth
+spec:
+  basicAuth:
+    secret: phpmyadmin-secret-auth
