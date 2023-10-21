@@ -139,6 +139,11 @@ kubectl cp ./index.html $(kubectl get pods --selector "app=nginx" --output=name 
  kubectl get pods --all-namespaces -o=json | jq -c '.items[] | {name: .metadata.name, namespace: .metadata.namespace, claimName:.spec.volumes[] | select( has ("persistentVolumeClaim") ).persistentVolumeClaim.claimName }'
 ```
 
+### Force state transition of Released volume to Available
+```shell
+kubectl patch pv <volume-name> -p '{"spec":{"claimRef": null}}'
+```
+
 ## Mysql Setup (manual)
 ```shell
 cd mysql-database/
