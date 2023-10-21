@@ -18,3 +18,4 @@ terraform-states_bucket_credentials
 data/
 crash.log
 crash.*.log
+wip/01-namespace-access/accounts/
