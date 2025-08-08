@@ -8,26 +8,30 @@ nodeSelector:
 ports:
   traefik:
     port: 9000
-    expose: true
+    expose:
+      default: true
     exposedPort: 9000
     protocol: TCP
   web:
     port: 8000
-    expose: true
+    expose:
+      default: true
     exposedPort: 80
     nodePort: 32080
     protocol: TCP
   websecure:
     port: 8443
-    expose: true
+    expose:
+      default: true
     exposedPort: 443
     protocol: TCP
     nodePort: 32443
 
-certResolvers:
+certificatesResolvers:
   letsencrypt:
-    email: "me@junaid.guru"
-    tlsChallenge: true
-    httpChallenge:
-      entryPoint: "web"
-    storage: /data/acme.json
+    acme:
+      email: "me@junaid.guru"
+      storage: "/data/acme.json"
+      tlsChallenge: true
+      httpChallenge:
+        entryPoint: "web"
