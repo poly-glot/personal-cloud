@@ -174,3 +174,10 @@ kubectl create secret generic database-secret --from-literal=DB_PASS=$(echo -n '
 ```shell
 echo $OCI_AUTH_TOKEN | docker login $DOCKER_HOST --username=$DOCKER_USERNAME --password-stdin 
 ```
+
+## SHH into node
+```shell
+kubectl get nodes --output=jsonpath='{range .items[*]}{@.metadata.name}{"\t"}{@.metadata.labels.kubernetes\.io/hostname}{"\n"}{end}'
+kubectl debug node/<node-name> -it --image=ubuntu
+chroot /host
+```

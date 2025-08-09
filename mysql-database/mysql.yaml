@@ -29,7 +29,7 @@ spec:
             claimName: task-pv-claim
       containers:
         - name: mysql
-          image: mysql:8.1.0
+          image: mysql:8.4.6
           env:
             - name: MYSQL_ROOT_PASSWORD
               valueFrom:
@@ -43,7 +43,7 @@ spec:
                 - -c
                 - |
                   password="$MYSQL_ROOT_PASSWORD"
-                  if /usr/bin/mysql --host=mysql-service --user=root --password="$password" --execute "SHOW DATABASES;"; then
+                  if /usr/bin/mysql --host=127.0.0.1 --user=root --password="$password" --execute "SHOW DATABASES;"; then
                     exit 0
                   else
                     exit 1
@@ -57,7 +57,7 @@ spec:
                 - -c
                 - |
                   password="$MYSQL_ROOT_PASSWORD"
-                  if /usr/bin/mysql --host=mysql-service --user=root --password="$password" --execute "SHOW DATABASES;"; then
+                  if /usr/bin/mysql --host=127.0.0.1 --user=root --password="$password" --execute "SHOW DATABASES;"; then
                     exit 0
                   else
                     exit 1
