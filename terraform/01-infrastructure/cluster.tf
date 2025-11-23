@@ -44,7 +44,7 @@ data "oci_core_images" "latest_image" {
 resource "oci_containerengine_node_pool" "k8s_node_pool" {
   cluster_id         = oci_containerengine_cluster.k8s_cluster.id
   compartment_id     = var.compartment_ocid
-  kubernetes_version = "v1.31.10"
+  kubernetes_version = "v1.33.1"
   name               = "${var.project}-node-pool"
   node_config_details {
     dynamic "placement_configs" {
