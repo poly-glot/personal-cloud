@@ -1,76 +1,32 @@
+# MySQL HeatWave Connection Resources
+# These resources allow K8s applications to connect to OCI MySQL HeatWave
+#
+# Prerequisites:
+# 1. Deploy MySQL HeatWave via Terraform: terraform apply (terraform/05-mysql-heatwave)
+# 2. Get the MySQL IP: terraform output mysql_host
+# 3. Update the MYSQL_HOST value below with the actual IP
+# 4. Update the mysql-secret with your actual password
+
+---
 apiVersion: v1
 kind: Secret
 metadata:
   name: mysql-secret
-type: kubernetes.io/basic-auth
+type: Opaque
 stringData:
-  password: <<passwordhere>>
----
-apiVersion: apps/v1
-kind:  Deployment
-metadata:
-  name: mysql-deployment
-  labels:
-    app: mysql
-spec:
-  selector:
-    matchLabels:
-      app: mysql
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      nodeSelector:
-        "kubernetes.io/hostname": node1
-      volumes:
-        - name: task-pv-storage
-          persistentVolumeClaim:
-            claimName: task-pv-claim
-      containers:
-        - name: mysql
-          image: mysql:8.4.6
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: password
-          readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  password="$MYSQL_ROOT_PASSWORD"
-                  if /usr/bin/mysql --host=127.0.0.1 --user=root --password="$password" --execute "SHOW DATABASES;"; then
-                    exit 0
-                  else
-                    exit 1
-                  fi
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  password="$MYSQL_ROOT_PASSWORD"
-                  if /usr/bin/mysql --host=127.0.0.1 --user=root --password="$password" --execute "SHOW DATABASES;"; then
-                    exit 0
-                  else
-                    exit 1
-                  fi
-            initialDelaySeconds: 60
-            periodSeconds: 30
-          ports:
-            - containerPort: 3306
-          volumeMounts:
-            - mountPath: "/var/lib/mysql"
-              name: task-pv-storage
+  # Update these with your MySQL HeatWave credentials
+  MYSQL_USER: "admin"
+  MYSQL_PASSWORD: "<<password-here>>"
+  # Connection string for applications
+  MYSQL_HOST: "<<heatwave-ip-here>>"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "app"
+  # Full DSN for applications that need it
+  DATABASE_URL: "mysql://admin:<<password-here>>@<<heatwave-ip-here>>:3306/app"
 
 ---
+# ExternalName service - allows apps to use 'mysql-service' as hostname
+# This provides a stable DNS name that resolves to MySQL HeatWave
 apiVersion: v1
 kind: Service
 metadata:
@@ -78,37 +34,16 @@ metadata:
   labels:
     app: mysql
 spec:
-  type: NodePort
-  selector:
-    app: mysql
-  ports:
-    - port: 3306
-      targetPort: 3306
-      protocol: TCP
+  type: ExternalName
+  externalName: "<<heatwave-ip-here>>"  # Replace with actual HeatWave IP
+
 ---
+# ConfigMap with MySQL connection info (non-sensitive)
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ConfigMap
 metadata:
-  name: task-pv-claim
-spec:
-  storageClassName: manual-mysql
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: task-pv-mysql-volume
-  labels:
-    type: local
-spec:
-  storageClassName: manual-mysql
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/data/mysql"
+  name: mysql-config
+data:
+  MYSQL_HOST: "<<heatwave-ip-here>>"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "app"

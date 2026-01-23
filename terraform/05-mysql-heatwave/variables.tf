@@ -13,5 +13,14 @@ variable "region" {
   description = "The region to provision the resources in"
 }
 
-# Note: main_instance_ocid is no longer needed - it is now dynamically discovered
-# from the node pool in data.tf
+variable "mysql_admin_username" {
+  type        = string
+  description = "MySQL admin username"
+  default     = "admin"
+}
+
+variable "mysql_admin_password" {
+  type        = string
+  description = "MySQL admin password"
+  sensitive   = true
+}

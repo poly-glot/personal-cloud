@@ -2,8 +2,32 @@ service:
   enabled: true
   single: true
   type: NodePort
+
 nodeSelector:
-  "kubernetes.io/hostname": "main"
+  role: main
+
+# Persist ACME certificates to OCI Block Volume
+persistence:
+  enabled: true
+  name: traefik-acme
+  accessMode: ReadWriteOnce
+  size: 50Gi
+  storageClass: oci-bv-traefik
+  path: /data
+
+# Fix permissions on acme.json
+deployment:
+  initContainers:
+    - name: volume-permissions
+      image: busybox:latest
+      command: ["sh", "-c", "touch /data/acme.json && chmod -v 600 /data/acme.json && chown 65532:65532 /data/acme.json"]
+      securityContext:
+        runAsNonRoot: false
+        runAsGroup: 0
+        runAsUser: 0
+      volumeMounts:
+        - name: traefik-acme
+          mountPath: /data
 
 ports:
   traefik:
@@ -19,6 +43,13 @@ ports:
     exposedPort: 80
     nodePort: 32080
     protocol: TCP
+    # HTTP to HTTPS redirect
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
   websecure:
     port: 8443
     expose:
@@ -27,11 +58,11 @@ ports:
     protocol: TCP
     nodePort: 32443
 
+# ACME Certificate Resolver for Let's Encrypt
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "me@junaid.guru"
-      storage: "/data/acme.json"
-      tlsChallenge: true
+      email: me@junaid.guru
+      storage: /data/acme.json
       httpChallenge:
-        entryPoint: "web"
+        entryPoint: web

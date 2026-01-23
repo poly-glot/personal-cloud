@@ -21,7 +21,7 @@ resource "oci_network_load_balancer_backend" "nlb_backend_http" {
   backend_set_name         = oci_network_load_balancer_backend_set.backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = 32080
-  target_id                = var.main_instance_ocid
+  target_id                = local.main_node_id
 }
 
 resource "oci_network_load_balancer_listener" "nlb_listener_http" {
@@ -47,7 +47,7 @@ resource "oci_network_load_balancer_backend" "nlb_backend_https" {
   backend_set_name         = oci_network_load_balancer_backend_set.backend_set_https.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = 32443
-  target_id                = var.main_instance_ocid
+  target_id                = local.main_node_id
 }
 
 resource "oci_network_load_balancer_listener" "nlb_listener_https" {

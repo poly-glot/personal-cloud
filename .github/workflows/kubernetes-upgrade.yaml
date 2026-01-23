@@ -1,0 +1,318 @@
+name: 00 - Kubernetes Upgrade (Automated)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kubernetes_version:
+        description: 'Kubernetes version (e.g., v1.34.1)'
+        required: true
+        type: string
+      skip_infrastructure:
+        description: 'Skip infrastructure update (only run post-upgrade tasks)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+  TF_VAR_fingerprint: ${{ secrets.OCI_CLI_FINGERPRINT }}
+  TF_VAR_private_key: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+  TF_VAR_region: ${{ secrets.OCI_CLI_REGION }}
+  TF_VAR_tenancy_ocid: ${{ secrets.OCI_CLI_TENANCY }}
+  TF_VAR_user_ocid: ${{ secrets.OCI_CLI_USER }}
+  TF_VAR_ssh_public_key: ${{ secrets.JUNAID_SSH_PUBLIC_KEY }}
+  TF_VAR_project: junaid
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+  OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+  OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+  OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+  OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+
+jobs:
+  update-version-in-code:
+    name: Update Kubernetes Version in Code
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_infrastructure }}
+    outputs:
+      version_updated: ${{ steps.update.outputs.updated }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Kubernetes version in cluster.tf
+        id: update
+        run: |
+          NEW_VERSION="${{ inputs.kubernetes_version }}"
+
+          # Update cluster kubernetes_version
+          sed -i "s/kubernetes_version = \"v[0-9.]*\"/kubernetes_version = \"${NEW_VERSION}\"/g" terraform/01-infrastructure/cluster.tf
+
+          # Check if changes were made
+          if git diff --quiet terraform/01-infrastructure/cluster.tf; then
+            echo "No changes needed - version already set to ${NEW_VERSION}"
+            echo "updated=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version updated to ${NEW_VERSION}"
+            echo "updated=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit version update
+        if: steps.update.outputs.updated == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add terraform/01-infrastructure/cluster.tf
+          git commit -m "Upgrade Kubernetes version to ${{ inputs.kubernetes_version }}"
+          git push
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure Changes
+    runs-on: ubuntu-latest
+    needs: update-version-in-code
+    if: ${{ !inputs.skip_infrastructure && always() && (needs.update-version-in-code.result == 'success' || needs.update-version-in-code.result == 'skipped') }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: git pull origin ${{ github.ref_name }}
+
+      - name: Terraform Setup
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.3
+
+      - name: Terraform Init
+        working-directory: ./terraform/01-infrastructure
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ./terraform/01-infrastructure
+        run: terraform apply -auto-approve -no-color
+
+  wait-for-nodes:
+    name: Wait for Node Pool to be Ready
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure
+    if: ${{ !inputs.skip_infrastructure }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Configure Kubectl
+        uses: oracle-actions/configure-kubectl-oke@v1.3.2
+        with:
+          cluster: ${{ secrets.OCI_OKE_CLUSTER_OCID }}
+
+      - name: Wait for nodes to be ready
+        run: |
+          echo "Waiting for nodes to be ready..."
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            READY_NODES=$(kubectl get nodes --no-headers 2>/dev/null | grep -c " Ready" || echo "0")
+            TOTAL_NODES=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+
+            echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS: $READY_NODES/$TOTAL_NODES nodes ready"
+
+            if [ "$READY_NODES" -ge 1 ] && [ "$READY_NODES" -eq "$TOTAL_NODES" ]; then
+              echo "All $READY_NODES nodes are ready!"
+              kubectl get nodes
+              break
+            fi
+
+            ATTEMPT=$((ATTEMPT+1))
+            sleep 30
+          done
+
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "Timeout waiting for nodes to be ready"
+            kubectl get nodes
+            exit 1
+          fi
+
+  label-nodes:
+    name: Apply Node Labels
+    runs-on: ubuntu-latest
+    needs: wait-for-nodes
+    if: always() && (needs.wait-for-nodes.result == 'success' || inputs.skip_infrastructure)
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Configure Kubectl
+        uses: oracle-actions/configure-kubectl-oke@v1.3.2
+        with:
+          cluster: ${{ secrets.OCI_OKE_CLUSTER_OCID }}
+
+      - name: Delete old node-labeler job if exists
+        run: |
+          kubectl delete job node-labeler -n kube-system --ignore-not-found=true
+
+      - name: Apply node labeler RBAC and Job
+        run: |
+          kubectl apply -k deployment/node-labeler/
+
+      - name: Wait for node labeler to complete
+        run: |
+          echo "Waiting for node-labeler job to complete..."
+          kubectl wait --for=condition=complete job/node-labeler -n kube-system --timeout=300s || {
+            echo "Job failed or timed out. Checking logs..."
+            kubectl logs job/node-labeler -n kube-system
+            exit 1
+          }
+
+          echo "Node labeler completed successfully!"
+          kubectl logs job/node-labeler -n kube-system
+
+      - name: Verify node labels
+        run: |
+          echo "Current node labels:"
+          kubectl get nodes --show-labels
+
+  deploy-storage-class:
+    name: Deploy OCI Storage Class
+    runs-on: ubuntu-latest
+    needs: label-nodes
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Configure Kubectl
+        uses: oracle-actions/configure-kubectl-oke@v1.3.2
+        with:
+          cluster: ${{ secrets.OCI_OKE_CLUSTER_OCID }}
+
+      - name: Apply OCI Block Volume StorageClass
+        run: |
+          kubectl apply -f terraform/02-traefik/storage-class.yaml
+          echo "StorageClass created:"
+          kubectl get storageclass
+
+  deploy-traefik:
+    name: Deploy Traefik
+    runs-on: ubuntu-latest
+    needs: deploy-storage-class
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Configure Kubectl
+        uses: oracle-actions/configure-kubectl-oke@v1.3.2
+        with:
+          cluster: ${{ secrets.OCI_OKE_CLUSTER_OCID }}
+
+      - uses: azure/setup-helm@v3
+        with:
+          version: 'v3.9.0'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy Traefik
+        working-directory: ./terraform/02-traefik
+        run: |
+          helm repo add traefik https://traefik.github.io/charts
+          helm repo update
+
+          helm upgrade --install traefik traefik/traefik \
+            --namespace kube-system --create-namespace -f values.yaml
+
+          kubectl apply -f http-to-https-redirect.yaml
+
+      - name: Wait for Traefik to be ready
+        run: |
+          kubectl rollout status deployment/traefik -n kube-system --timeout=300s || {
+            echo "Traefik deployment status:"
+            kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik
+            kubectl describe deployment traefik -n kube-system
+          }
+
+  update-network-loadbalancer:
+    name: Update Network Load Balancer
+    runs-on: ubuntu-latest
+    needs: deploy-traefik
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Terraform Setup
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.3
+
+      - name: Terraform Init
+        working-directory: ./terraform/03-network-loadbalancer
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ./terraform/03-network-loadbalancer
+        run: |
+          terraform apply -auto-approve -no-color
+
+          echo "=== Network Load Balancer Updated ==="
+          terraform output
+
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: update-network-loadbalancer
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Configure Kubectl
+        uses: oracle-actions/configure-kubectl-oke@v1.3.2
+        with:
+          cluster: ${{ secrets.OCI_OKE_CLUSTER_OCID }}
+
+      - name: Verify cluster health
+        run: |
+          echo "=== Cluster Info ==="
+          kubectl cluster-info
+
+          echo ""
+          echo "=== Nodes ==="
+          kubectl get nodes -o wide
+
+          echo ""
+          echo "=== Node Labels ==="
+          kubectl get nodes --show-labels
+
+          echo ""
+          echo "=== Pods in kube-system ==="
+          kubectl get pods -n kube-system
+
+          echo ""
+          echo "=== Traefik Service ==="
+          kubectl get svc -n kube-system | grep traefik || echo "Traefik service not found"
+
+          echo ""
+          echo "=== Kubernetes Version ==="
+          kubectl version
+
+      - name: Summary
+        run: |
+          echo "============================================"
+          echo "Kubernetes Upgrade Complete!"
+          echo "============================================"
+          echo "Version: ${{ inputs.kubernetes_version }}"
+          echo ""
+          echo "Infrastructure:"
+          echo "- Nodes labeled with role=main (for Traefik)"
+          echo "- OCI Block Volume StorageClass deployed (Traefik ACME)"
+          echo "- Network Load Balancer updated with new node"
+          echo ""
+          echo "Next steps:"
+          echo "1. Verify your applications are running correctly"
+          echo "2. Check ingress routes are accessible"
+          echo ""
+          echo "Note: MySQL is managed by OCI MySQL HeatWave (Free Tier)"
+          echo "Traefik ACME certs persist via OCI Block Volume"
+          echo "============================================"

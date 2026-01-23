@@ -31,13 +31,17 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
         id: install
 
+      - name: Apply StorageClass for Traefik persistence
+        run: |
+          kubectl apply -f terraform/02-traefik/storage-class.yaml
+
       - name: Run Helm to setup traefik
         run: |
           cd terraform/02-traefik
-          
+
           helm repo add traefik https://traefik.github.io/charts
           helm repo update
-          
+
           helm upgrade --install traefik traefik/traefik \
           --namespace kube-system --create-namespace -f values.yaml
 

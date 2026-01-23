@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: node-labeler
+  namespace: kube-system
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: node-labeler
+      restartPolicy: OnFailure
+      containers:
+        - name: labeler
+          image: bitnami/kubectl:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              echo "Fetching all nodes..."
+              NODES=$(kubectl get nodes --no-headers -o custom-columns=":metadata.name" | sort)
+
+              if [ -z "$NODES" ]; then
+                echo "ERROR: No nodes found"
+                exit 1
+              fi
+
+              echo "Found nodes:"
+              echo "$NODES"
+
+              # Convert to array
+              NODE_ARRAY=($NODES)
+              NODE_COUNT=${#NODE_ARRAY[@]}
+
+              echo "Total nodes: $NODE_COUNT"
+
+              # First node gets role=main (for Traefik/ingress - NLB points to this node)
+              if [ $NODE_COUNT -ge 1 ]; then
+                MAIN_NODE=${NODE_ARRAY[0]}
+                echo "Labeling $MAIN_NODE with role=main..."
+                kubectl label nodes "$MAIN_NODE" role=main --overwrite
+              fi
+
+              # All other nodes get role=worker
+              for ((i=1; i<$NODE_COUNT; i++)); do
+                WORKER_NODE=${NODE_ARRAY[$i]}
+                echo "Labeling $WORKER_NODE with role=worker..."
+                kubectl label nodes "$WORKER_NODE" role=worker --overwrite
+              done
+
+              # Note: MySQL no longer needs a dedicated node label
+              # It uses OCI Block Volumes which persist across node recreation
+              # The CSI driver handles volume attachment to any available node
+
+              echo "Node labeling complete!"
+              kubectl get nodes --show-labels

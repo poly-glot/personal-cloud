@@ -54,13 +54,13 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
         subnet_id           = oci_core_subnet.vcn_private_subnet.id
       }
     }
-    size = 4
+    size = 2
   }
   node_shape = "VM.Standard.A1.Flex"
 
   node_shape_config {
-    memory_in_gbs = 6
-    ocpus         = 1
+    memory_in_gbs = 12
+    ocpus         = 2
   }
 
   node_source_details {
@@ -70,7 +70,6 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
 
   lifecycle {
     ignore_changes = [
-      kubernetes_version,
       defined_tags,
       node_metadata,
       node_config_details[0].placement_configs,

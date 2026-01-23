@@ -12,14 +12,32 @@ spec:
           ports:
             - containerPort: 80
           env:
-            - name: DB_PASS
+            # MySQL HeatWave connection from mysql-secret
+            - name: MYSQL_HOST
               valueFrom:
                 secretKeyRef:
-                  name: database-secret
-                  key: DB_PASS
-          envFrom:
-            - configMapRef:
-                name: database-map
+                  name: mysql-secret
+                  key: MYSQL_HOST
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_DATABASE
+            - name: MYSQL_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PORT
           resources:
             requests:
               memory: "16Mi"

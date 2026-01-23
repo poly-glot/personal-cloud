@@ -1,12 +1,11 @@
-
-name: 03 - Deploy OCI Network Loadbalancer
+name: 05 - Deploy MySQL HeatWave
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Infrastructure
+  deploy:
+    name: Deploy MySQL HeatWave
     runs-on: ubuntu-latest
     env:
       TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
@@ -15,16 +14,16 @@ jobs:
       TF_VAR_region: ${{ secrets.OCI_CLI_REGION }}
       TF_VAR_tenancy_ocid: ${{ secrets.OCI_CLI_TENANCY }}
       TF_VAR_user_ocid: ${{ secrets.OCI_CLI_USER }}
-      TF_VAR_ssh_public_key: ${{ secrets.JUNAID_SSH_PUBLIC_KEY }}
       TF_VAR_project: junaid
-      # Note: main_instance_ocid is now dynamically discovered from node pool
+      TF_VAR_mysql_admin_username: ${{ secrets.MYSQL_ADMIN_USERNAME }}
+      TF_VAR_mysql_admin_password: ${{ secrets.MYSQL_ADMIN_PASSWORD }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      working_directory: ./terraform/03-network-loadbalancer/
+      working_directory: ./terraform/05-mysql-heatwave/
 
     defaults:
       run:
-        working-directory: ${{env.working_directory}}
+        working-directory: ${{ env.working_directory }}
 
     steps:
       - name: Check out code
@@ -52,3 +51,11 @@ jobs:
         id: apply
         run: terraform apply -auto-approve -no-color
 
+      - name: Get MySQL Endpoint
+        run: |
+          echo "=== MySQL HeatWave Deployed ==="
+          terraform output
+          echo ""
+          echo "Connection string for apps:"
+          echo "Host: $(terraform output -raw mysql_host)"
+          echo "Port: $(terraform output -raw mysql_port)"

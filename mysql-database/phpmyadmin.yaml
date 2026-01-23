@@ -13,12 +13,12 @@ spec:
     spec:
       containers:
         - name: phpmyadmin
-          image: "phpmyadmin:latest"
+          image: "docker.io/arm64v8/phpmyadmin:latest"
           ports:
             - containerPort: 80
           env:
             - name: PMA_HOST
-              value: "mysql-service.database.svc.cluster.local"
+              value: "10.0.1.239"
   selector:
     matchLabels:
       app: phpmyadmin
