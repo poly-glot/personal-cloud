@@ -1,0 +1,24 @@
+# Temporary pod for connecting to Redis interactively
+# Usage: kubectl apply -f redis-cli-pod.yaml
+#        kubectl exec -it -n redis redis-cli -- sh
+#        redis-cli -h redis-master -a $REDIS_PASSWORD
+# Delete when done: kubectl delete -f redis-cli-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis-cli
+  namespace: redis
+  labels:
+    app: redis-cli
+spec:
+  containers:
+    - name: redis-cli
+      image: docker.io/library/redis:7-alpine
+      command: ["sleep", "3600"]
+      env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: REDIS_PASSWORD
+  restartPolicy: Never
