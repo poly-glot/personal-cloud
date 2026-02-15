@@ -181,3 +181,10 @@ kubectl get nodes --output=jsonpath='{range .items[*]}{@.metadata.name}{"\t"}{@.
 kubectl debug node/<node-name> -it --image=ubuntu
 chroot /host
 ```
+
+# Allow Google Credentials to deploy firebase
+```shell
+gcloud projects add-iam-policy-binding {{projectId}} \
+    --member="serviceAccount:firebase-ci-cd@agile0.iam.gserviceaccount.com" \
+    --role="roles/firebase.admin"
+```
