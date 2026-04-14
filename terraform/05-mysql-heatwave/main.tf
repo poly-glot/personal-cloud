@@ -23,6 +23,11 @@ resource "oci_mysql_mysql_db_system" "mysql_heatwave" {
 
   description = "MySQL HeatWave Free Tier for ${var.project}"
 
+  # Always Free DB systems cannot have a backup policy enabled
+  backup_policy {
+    is_enabled = false
+  }
+
   # Prevent accidental deletion
   lifecycle {
     prevent_destroy = false  # Set to true in production
