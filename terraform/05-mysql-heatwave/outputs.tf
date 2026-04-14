@@ -27,3 +27,13 @@ output "mysql_state" {
   description = "MySQL DB System state"
   value       = oci_mysql_mysql_db_system.mysql_heatwave.state
 }
+
+output "mysql_public_ip" {
+  description = "Public IP of the MySQL NLB"
+  value       = oci_network_load_balancer_network_load_balancer.mysql_nlb.ip_addresses
+}
+
+output "mysql_public_endpoint" {
+  description = "Public MySQL connection endpoint (via NLB)"
+  value       = "${[for ip in oci_network_load_balancer_network_load_balancer.mysql_nlb.ip_addresses : ip.ip_address if ip.is_public][0]}:3306"
+}
