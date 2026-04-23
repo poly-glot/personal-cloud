@@ -9,6 +9,11 @@ resource "oci_mysql_mysql_db_system" "mysql_heatwave" {
   # Use AD-2 which has MySQL Free tier available
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[1].name
 
+  # Pin to MySQL 8.4 LTS. Without this, OCI picks the latest default (currently
+  # 9.x Innovation), which has a short support cycle. 8.4 is the Long-Term
+  # Support track — 5-year support, bug/security fixes only.
+  mysql_version = "8.4.8"
+
   # Network - place in private subnet (same as K8s nodes)
   subnet_id = data.oci_core_subnets.vcn_private_subnet.subnets[0].id
 
