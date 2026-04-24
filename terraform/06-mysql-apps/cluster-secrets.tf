@@ -1,12 +1,10 @@
-resource "google_secret_manager_secret" "db_host" {
+# db-host shell is owned by firebase-cloud (imports.tf). We only write versions.
+data "google_secret_manager_secret" "db_host" {
   secret_id = "db-host"
-  replication {
-    auto {}
-  }
 }
 
 resource "google_secret_manager_secret_version" "db_host" {
-  secret      = google_secret_manager_secret.db_host.id
+  secret      = data.google_secret_manager_secret.db_host.id
   secret_data = local.mysql_host
 }
 

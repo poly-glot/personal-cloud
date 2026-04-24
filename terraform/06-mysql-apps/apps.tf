@@ -76,7 +76,7 @@ locals {
           google_secret_manager_secret.app_user[app].secret_id,
           google_secret_manager_secret.app_pass[app].secret_id,
           google_secret_manager_secret.app_name[app].secret_id,
-          google_secret_manager_secret.db_host.secret_id,
+          data.google_secret_manager_secret.db_host.secret_id,
           ] : {
           app    = app
           secret = secret_id
