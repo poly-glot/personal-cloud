@@ -41,11 +41,16 @@ locals {
   # Pick the newest aarch64 source matching the cluster's k8s version.
   # OKE-specific node images aren't returned by oci_core_images (the Compute
   # platform-images API); they only appear via the OKE node-pool-options API.
+  # sort() needs strings, so build a name->image_id map, sort the keys
+  # (date is embedded in source_name so lexical sort = newest first when
+  # reversed), and look up the latest.
   k8s_ver = replace(oci_containerengine_cluster.k8s_cluster.kubernetes_version, "v", "")
-  oke_node_image = reverse(sort([
+  oke_image_map = {
     for s in data.oci_containerengine_node_pool_option.oke_options.sources :
-    s if can(regex("aarch64.*OKE-${local.k8s_ver}-", s.source_name))
-  ]))[0]
+    s.source_name => s.image_id
+    if can(regex("aarch64.*OKE-${local.k8s_ver}-", s.source_name))
+  }
+  oke_node_image_id = local.oke_image_map[reverse(sort(keys(local.oke_image_map)))[0]]
 }
 
 resource "oci_containerengine_node_pool" "k8s_node_pool" {
@@ -71,7 +76,7 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
   }
 
   node_source_details {
-    image_id    = local.oke_node_image.image_id
+    image_id    = local.oke_node_image_id
     source_type = "image"
   }
 
