@@ -35,8 +35,13 @@ data "oci_core_images" "latest_image" {
   operating_system         = "Oracle Linux"
   operating_system_version = "8"
   filter {
-    name   = "display_name"
-    values = ["^.*aarch64-.*$"]
+    name = "display_name"
+    # OKE-specific node images are tagged "...aarch64-...-OKE-<k8s-version>-..."
+    # using the cluster's kubernetes_version. Generic Oracle Linux images
+    # (without OKE-) don't have the right k8s version baked in and OCI
+    # rejects node-pool kubernetes_version updates that don't match the
+    # bundled image version (409-Conflict).
+    values = ["^.*aarch64-.*-OKE-${replace(oci_containerengine_cluster.k8s_cluster.kubernetes_version, "v", "")}-.*$"]
     regex  = true
   }
 }
@@ -73,7 +78,9 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
       defined_tags,
       node_metadata,
       node_config_details[0].placement_configs,
-      node_source_details
+      # node_source_details intentionally NOT ignored: when kubernetes_version
+      # changes, the OKE image must change with it (OCI rejects node-pool
+      # k8s version updates that don't match the bundled image version).
     ]
   }
 
