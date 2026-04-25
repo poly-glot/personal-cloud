@@ -19,5 +19,8 @@ data "google_secret_manager_secret_version" "mysql_app_catalog" {
 }
 
 locals {
-  apps = jsondecode(data.google_secret_manager_secret_version.mysql_app_catalog.secret_data)
+  # nonsensitive: GSM data is sensitive by default, but the catalog only
+  # contains app names + DB names + SA emails — non-secret config that we
+  # need to use in for_each and surface in outputs.
+  apps = nonsensitive(jsondecode(data.google_secret_manager_secret_version.mysql_app_catalog.secret_data))
 }
