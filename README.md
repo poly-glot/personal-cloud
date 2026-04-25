@@ -144,24 +144,11 @@ kubectl cp ./index.html $(kubectl get pods --selector "app=nginx" --output=name 
 kubectl patch pv <volume-name> -p '{"spec":{"claimRef": null}}'
 ```
 
-## Mysql Setup (manual)
-```shell
-cd mysql-database/
-kubectl create namespace database
-kubectl apply -f mysql.yaml --namespace database
-kubectl port-forward service/mysql-service 3306:3306 --namespace database
+## MySQL
 
-cd mysql-database/
-kubectl create namespace phpmyadmin
-# replace <<usernamehere>> and <<passwordhere>> in phpmyadmin.yaml
-kubectl apply -f phpmyadmin.yaml --namespace phpmyadmin
+MySQL is provisioned on OCI MySQL HeatWave (Always Free). See `terraform/05-mysql-heatwave/` for the cluster and `terraform/06-mysql-apps/` for per-app database/user provisioning. Apps connect via the `db-host` GSM secret.
 
-CREATE DATABASE mydatabase;
-CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
-GRANT ALL PRIVILEGES ON mydatabase.* TO 'chatapp'@'%';
-
-kubectl create secret generic database-secret --from-literal=DB_PASS=$(echo -n 'mypassword' | base64) --namespace projectnamespace
-```
+The previous in-cluster MySQL deployment (`mysql-database/`) and `phpmyadmin` UI were removed in favour of the managed HeatWave instance.
 
 ## Access OCI Registry Locally
 1. Click on Profile icon in Oracle Cloud and visit "Tenancy: {{yourid}}" link
