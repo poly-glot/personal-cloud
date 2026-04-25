@@ -4,8 +4,8 @@ resource "oci_mysql_mysql_db_system" "mysql_heatwave" {
   display_name   = "${var.project}-mysql"
 
   # Free Tier shape
-  shape_name          = "MySQL.Free"
-  configuration_id    = data.oci_mysql_mysql_configurations.free_tier.configurations[0].id
+  shape_name       = "MySQL.Free"
+  configuration_id = data.oci_mysql_mysql_configurations.free_tier.configurations[0].id
   # Use AD-2 which has MySQL Free tier available
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[1].name
 

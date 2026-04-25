@@ -29,11 +29,11 @@ output "mysql_state" {
 }
 
 output "mysql_public_ip" {
-  description = "Public IP of the MySQL NLB"
-  value       = oci_network_load_balancer_network_load_balancer.mysql_nlb.ip_addresses
+  description = "Public IP of the shared NLB (junaid-nlb) fronting MySQL"
+  value       = local.shared_nlb_public_ip
 }
 
 output "mysql_public_endpoint" {
-  description = "Public MySQL connection endpoint (via NLB)"
-  value       = "${[for ip in oci_network_load_balancer_network_load_balancer.mysql_nlb.ip_addresses : ip.ip_address if ip.is_public][0]}:3306"
+  description = "Public MySQL connection endpoint (via shared NLB)"
+  value       = "${local.shared_nlb_public_ip}:3306"
 }
