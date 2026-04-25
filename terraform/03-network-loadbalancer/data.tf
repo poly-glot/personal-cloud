@@ -15,10 +15,13 @@ data "oci_containerengine_node_pool" "main_node_pool" {
 }
 
 locals {
-  # Get the first active node from the node pool as the main node
+  # Get the first active node from the node pool as the main node.
+  # Backends use ip_address (not target_id/OCID) because OCI manages backends
+  # by ip:port; using target_id and ip_address for the same node causes
+  # "duplicate backend IP/id + port combinations not allowed" on apply.
   active_nodes = [
     for node in data.oci_containerengine_node_pool.main_node_pool.nodes :
     node if node.state == "ACTIVE"
   ]
-  main_node_id = length(local.active_nodes) > 0 ? local.active_nodes[0].id : null
+  main_node_ip = length(local.active_nodes) > 0 ? local.active_nodes[0].private_ip : null
 }

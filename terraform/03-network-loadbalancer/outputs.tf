@@ -2,9 +2,9 @@ output "nlb_ip" {
   value = oci_network_load_balancer_network_load_balancer.nlb.ip_addresses
 }
 
-output "main_node_id" {
-  description = "The OCID of the main node used for NLB backend"
-  value       = local.main_node_id
+output "main_node_ip" {
+  description = "Private IP of the main OKE node used as the NLB backend"
+  value       = local.main_node_ip
 }
 
 output "main_node_name" {
