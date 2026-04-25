@@ -80,6 +80,10 @@ spec:
 
 ---
 # PVC for Master
+# Note: OCI block volume CSI driver enforces a 50 GB minimum regardless
+# of the requested size, so this provisions a 50 GiB volume even though
+# Redis uses <1 MB. storageClassName=oci-bv-low-cost (vpusPerGB=0) keeps
+# the volume off the Performance Units billing tier.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -87,7 +91,7 @@ metadata:
   namespace: redis
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: oci-bv
+  storageClassName: oci-bv-low-cost
   resources:
     requests:
       storage: 10Gi

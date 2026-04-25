@@ -1,0 +1,15 @@
+# Lower Cost StorageClass (vpusPerGB=0) for the redis-master PVC.
+# OCI's default `oci-bv` StorageClass omits the parameter, which makes
+# new PVCs land at the default 10 vpus/GB ("Balanced") and incur
+# Performance Units charges. Redis-master holds <1 MB of data with
+# AOF append-only writes — no perf headroom needed.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: oci-bv-low-cost
+provisioner: blockvolume.csi.oraclecloud.com
+parameters:
+  vpusPerGB: "0"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true

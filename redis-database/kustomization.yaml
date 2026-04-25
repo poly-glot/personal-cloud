@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - storage-class.yaml
   - redis-secret.yaml
   - redis-config.yaml
   - redis-deployment.yaml
