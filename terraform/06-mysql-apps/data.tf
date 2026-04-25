@@ -11,3 +11,13 @@ locals {
     if ip.is_public
   ][0]
 }
+
+# Apps catalog published by firebase-cloud terraform (mysql-catalog.tf).
+# Schema: { "<app>": { "database": "<db_name>", "sa_email": "<runtime sa email>" } }
+data "google_secret_manager_secret_version" "mysql_app_catalog" {
+  secret = "mysql-app-catalog"
+}
+
+locals {
+  apps = jsondecode(data.google_secret_manager_secret_version.mysql_app_catalog.secret_data)
+}

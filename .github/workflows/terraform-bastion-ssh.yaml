@@ -8,6 +8,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     env:
       TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
       TF_VAR_fingerprint: ${{ secrets.OCI_CLI_FINGERPRINT }}
@@ -22,8 +25,6 @@ jobs:
       TF_VAR_instance_ids: '["ocid1.instance.oc1.uk-london-1.anwgiljt7rbqbnacvu6dqcg3bbg4inrjyrylreurzykchakkhmgo6pypugsa"]'
       TF_VAR_client_cidr_block_allow_list: '["0.0.0.0/0"]'
 
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       working_directory: ./terraform/04-ssh/
 
     defaults:
@@ -33,6 +34,25 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.INFRA_WIF_PROVIDER }}
+          service_account: ${{ secrets.INFRA_GCP_SA_EMAIL }}
+
+      - name: Load OCI tfstate creds from Secret Manager
+        id: creds
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            OCI_TF_AWS_KEY:firebase-cloud-491613/oci-tf-aws-access-key-id
+            OCI_TF_AWS_SECRET:firebase-cloud-491613/oci-tf-aws-secret-access-key
+
+      - name: Export creds to terraform env
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ steps.creds.outputs.OCI_TF_AWS_KEY }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ steps.creds.outputs.OCI_TF_AWS_SECRET }}" >> $GITHUB_ENV
 
       - name: Terraform Setup
         uses: hashicorp/setup-terraform@v2
