@@ -1,6 +1,8 @@
 # Redis Database
 
-1 master + 1 replica setup with persistence (AOF + RDB) on OCI Kubernetes. Master runs on the `main` node, replica on the `worker` node. Each pod has 1Gi memory limit.
+Single-master Redis with persistence (AOF + RDB) on OCI Kubernetes. 1Gi memory limit.
+
+The replica was removed to stay under the OCI Always Free 200 GB / 5-volume cap (each PVC provisions a 50 GB block volume). To re-introduce a replica, copy the master Deployment + a `redis-replica-data` PVC and add a `replica.conf` block to `redis-config.yaml`.
 
 ## Prerequisites
 
@@ -16,9 +18,9 @@ export KUBECONFIG=~/.kube/oci
 
 Replace placeholders before deploying:
 
-**redis-secret.yaml** — set `<<redis-password-here>>` (3 occurrences)
+**redis-secret.yaml** — set `<<redis-password-here>>` (2 occurrences)
 
-**redis-config.yaml** — set `<<redis-password-here>>` in `requirepass` and `masterauth` for both master and replica (4 occurrences)
+**redis-config.yaml** — set `<<redis-password-here>>` in `requirepass` and `masterauth` (2 occurrences)
 
 **redis-commander.yaml** — set `<<username-here>>` and `<<password-here>>` for basic auth
 
@@ -34,11 +36,9 @@ kubectl apply -k redis-database/
 # Watch pods come up
 kubectl get pods -n redis -w
 
-# Check replication status
-kubectl exec -n redis deploy/redis-master -- redis-cli -a <your-password> info replication
+# Confirm master is responsive
+kubectl exec -n redis deploy/redis-master -- redis-cli -a <your-password> ping
 ```
-
-You should see `connected_slaves:1` in the master's replication info.
 
 ## 4. Connect via CLI
 
@@ -63,8 +63,7 @@ Accessible at `https://redis.junaid.guru` (protected by basic auth).
 | Service | DNS | Use |
 |---------|-----|-----|
 | `redis-master` | `redis-master.redis.svc.cluster.local:6379` | Read/Write |
-| `redis-replica` | `redis-replica.redis.svc.cluster.local:6379` | Read-only |
-| `redis-service` | `redis-service.redis.svc.cluster.local:6379` | Any pod |
+| `redis-service` | `redis-service.redis.svc.cluster.local:6379` | Any pod with `app=redis` selector |
 
 ## Connecting from Other Namespaces
 
@@ -89,7 +88,7 @@ redis-master.redis.svc.cluster.local:6379
 
 ```bash
 kubectl delete -k redis-database/
-kubectl delete pvc redis-master-data redis-replica-data -n redis
+kubectl delete pvc redis-master-data -n redis
 ```
 
-Note: PVCs are not deleted by `kubectl delete -k` and must be removed manually to free the OCI Block Volumes.
+Note: PVCs are not deleted by `kubectl delete -k` and must be removed manually to free the OCI Block Volume.

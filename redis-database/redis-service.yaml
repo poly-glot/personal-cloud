@@ -18,28 +18,9 @@ spec:
     role: master
 
 ---
-# Service for Redis Replica (read-only)
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis-replica
-  namespace: redis
-  labels:
-    app: redis
-    role: replica
-spec:
-  type: ClusterIP
-  ports:
-    - port: 6379
-      targetPort: 6379
-      name: client
-  selector:
-    app: redis
-    role: replica
-
----
-# Service targeting all Redis pods (master + replica)
-# Use for reads when you don't care about consistency
+# Service targeting all Redis pods (just the master since replica was removed
+# to stay under the OCI Always Free 200 GB / 5-volume cap; if a replica is
+# re-introduced, this service auto-targets it via app=redis selector)
 apiVersion: v1
 kind: Service
 metadata:

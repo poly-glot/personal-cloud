@@ -28,7 +28,7 @@ spec:
                   name: redis-secret
                   key: REDIS_PASSWORD
             - name: REDIS_HOSTS
-              value: "master:redis-master.redis.svc.cluster.local:6379:0:$(REDIS_PASSWORD),replica:redis-replica.redis.svc.cluster.local:6379:0:$(REDIS_PASSWORD)"
+              value: "master:redis-master.redis.svc.cluster.local:6379:0:$(REDIS_PASSWORD)"
           resources:
             requests:
               cpu: 50m
