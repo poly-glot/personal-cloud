@@ -63,9 +63,42 @@ gh workflow run kubernetes-upgrade.yaml --repo poly-glot/personal-cloud --ref ma
 
 **The workflow does NOT cycle existing nodes.** It updates the node pool template (kubernetes_version + image) but existing VMs keep running their old kubelet/image until replaced. The workflow's `wait-for-nodes` step only checks that nodes are Ready (which they will be — on the OLD version). After the workflow's "successful" completion, you may still see old kubelets via `kubectl get nodes`.
 
+**The workflow often reports overall `failure` even when the upgrade worked.** Observed May 2026: the `Wait for Node Pool to be Ready` job died at its "Configure Kubectl" step with `Unexpected HTTP response: 404` (a transient kubeconfig fetch on the runner), which then **skipped all downstream jobs** (Apply Node Labels, Deploy Traefik, Update NLB, Verify). The two jobs that matter — `Update Kubernetes Version in Code` and `Deploy Infrastructure Changes` — had already succeeded, so the control plane + node pool template were correctly on the new version. Check the *individual job* conclusions, not just the overall red X, then do the manual node-cycling below.
+
+### ⚠️ AD-pinning trap (this WILL bite you — it caused real downtime on the v1.34.2 → v1.35.2 cycle, May 2026)
+
+The RWO block volumes for **Traefik** (`oci-bv-traefik`, Retain) and **Redis master** (`oci-bv`) are **hard-pinned to `UK-LONDON-1-AD-1`** via PV `nodeAffinity` (`topology.kubernetes.io/zone In [UK-LONDON-1-AD-1]`). Verify with:
+
+```bash
+kubectl get pv $(kubectl -n kube-system get pvc traefik -o jsonpath='{.spec.volumeName}') -o jsonpath='{.spec.nodeAffinity}'
+```
+
+But the node pool's `placement_configs` span **AD-1, AD-2, AND AD-3** (terraform's `dynamic placement_configs for_each = local.azs`). So when you delete a node, **OKE can place the replacement in any AD**. If the node hosting Traefik/Redis (must be AD-1) gets replaced by a node in AD-2/AD-3, the pods go `Pending` forever with:
+
+```
+FailedScheduling: node(s) didn't match PersistentVolume's node affinity
+```
+
+Traefik is a **single replica with hard `nodeSelector: role=main`** — if its AD-1 node dies and the only `role=main` node is in another AD, ingress stays down.
+
+**The fix that works: pin the node pool to AD-1 only BEFORE cycling, then the replacement is guaranteed AD-1.** Terraform's `lifecycle` block ignores `node_config_details[0].placement_configs`, so a CLI change here causes **no terraform drift**:
+
+```bash
+SUBNET=$(oci ce node-pool get --node-pool-id "$NODE_POOL_ID" --query 'data."node-config-details"."placement-configs"[0]."subnet-id"' --raw-output)
+echo "[{\"availabilityDomain\":\"gRyn:UK-LONDON-1-AD-1\",\"subnetId\":\"$SUBNET\"}]" > /tmp/pc-ad1.json
+oci ce node-pool update --node-pool-id "$NODE_POOL_ID" --placement-configs file:///tmp/pc-ad1.json \
+  --force --wait-for-state SUCCEEDED
+```
+
+**Side effect to expect:** restricting placement to AD-1 makes OKE reconcile the *whole* pool into AD-1 — it will replace any existing AD-2/AD-3 node too. On the May 2026 cycle this collapsed a (AD-1 + AD-2) pair into two AD-1 nodes in one shot, which actually finished the upgrade faster but cost a brief Traefik outage while the new nodes came up unlabeled.
+
+**Current state (left intentionally): `placement_configs` = AD-1 only.** This matches the AD-1-pinned volumes and makes node cycling reliable. It sacrifices AD-failure resilience — but the single-replica AD-1 volumes have no AD resilience anyway, so it's the honest config. To restore the 3-AD spread you'd re-run the CLI update with all three ADs, but expect OKE to immediately rebalance (cycling a node to AD-2/3 → Traefik breaks again). Don't restore casually.
+
+**After cycling, new nodes come up with NO `role` label** → label them (`10.0.1.X role=main` for the Traefik/Redis node, the other `role=worker`) or Traefik stays `Pending`.
+
 ### Cycling nodes manually (the missing step)
 
-Run after the workflow succeeds. **One node at a time** for minimum downtime:
+Run after the workflow succeeds. **One node at a time** for minimum downtime. **Pin placement to AD-1 first (see AD-pinning trap above).**
 
 ```bash
 TENANCY=ocid1.tenancy.oc1..aaaaaaaaje52yql3f2nlli7zur5fvweb3xizhkmjbx65eocerfkqge7hkyaq
