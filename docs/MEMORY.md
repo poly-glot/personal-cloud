@@ -151,7 +151,7 @@ kubectl get nodes
 oci ce node-pool list --compartment-id "$TENANCY" --query 'data[*].{name:name,"k8s":"kubernetes-version"}'
 
 # All ingress hosts reachable
-for host in toolbox.junaid.guru ticketlist-api.junaid.guru shehryar.dev; do
+for host in toolbox.junaid.guru ticketlist-api.junaid.guru; do
   echo "$host: $(curl -s -o /dev/null -w '%{http_code}' -L -m 10 "https://$host/" 2>&1)"
 done
 
