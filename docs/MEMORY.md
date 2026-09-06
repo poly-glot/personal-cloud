@@ -177,6 +177,8 @@ done
 kubectl get pods -A --no-headers | awk '$4!="Running"&&$4!="Completed"'
 ```
 
+**ticketd replica does not re-follow a restarted leader — restart it (bit us 2026-09-06).** `ticketlist/ticketd` runs with `TICKETD_SYNC_STANDBYS=1` and `ZIGSTORE_QUORUM_DEADLINE_MS=15000`. When the node hosting the leader (`ticketd-0`) is cycled, the replica (`ticketd-1`) logs `receiver session ended: error.ConnectionClosed — reconnecting` and then never reconnects to the *new* leader pod (stale IP for `ticketd-0.ticketd`). The leader then has no sync standby, so **every write blocks for the 15 s quorum deadline** while reads stay fast. The Cloud Run edge (`ticketlist-edge`) times out at 10 s → users see "internal error" on join-queue, its logs say `engine timeout after 10000ms`, `/api/cart/start` takes 10012 ms, `/healthz/` 503. Pods all look Running; the tell is the agents' `/status` LSNs diverging (`wget -qO- http://<pod-ip>:7001/status` → `durableLsn` leader 114 vs replica 98) and the watchdog's `lagLsn` climbing. Fix: `kubectl -n ticketlist delete pod ticketd-1` — it reboots, fetches a base backup from the current leader, and LSNs converge within seconds. Do this after any node cycle that moved `ticketd-0`. (Real fix belongs in the ticketd agent: re-resolve the leader on reconnect.)
+
 Fresh nodes show scary-looking transient events for the first ~2 minutes while daemonsets register: `FailedCreatePodSandBox … /run/flannel/subnet.env: no such file`, `CSINode … does not contain driver blockvolume.csi.oraclecloud.com`, and `FailedAttachVolume … device attribute /dev/oracleoci/oraclevdb is already in use` (two PVCs attaching at once). All self-heal. Don't act on them before the 3-minute mark.
 
 ### Estimated downtime
