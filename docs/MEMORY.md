@@ -36,7 +36,7 @@ Use this whenever bumping the cluster's Kubernetes version. Verified working on 
    Any `minAvailable: N` where N >= deployment replicas means **drain will hang forever**. Either:
    - Convert to `maxUnavailable: 1`
    - Or scale the deployment to (N+1) replicas
-   - Or, if downtime is acceptable, leave the PDB alone and drain with `--disable-eviction` (uses delete instead of the eviction API, which bypasses PDBs). Used on the Sept 2026 cycle for `ticketlist-api-develop/app-v1` (minAvailable 1, 1 replica, lives in the ticketlist-api repo).
+   - Or, if downtime is acceptable, leave the PDB alone and drain with `--disable-eviction` (uses delete instead of the eviction API, which bypasses PDBs). Used on the Sept 2026 cycle for `ticketlist-api-develop/app-v1` (minAvailable 1, 1 replica; that namespace was removed on 2026-09-07 along with `ticketlist-api-main`).
    - The OKE node pool eviction policy should already be `isForceDeleteAfterGraceDuration: true` (1h timeout); confirm with:
      ```bash
      oci ce node-pool get --node-pool-id $(oci ce node-pool list --compartment-id <tenancy> --query 'data[0].id' --raw-output) \
@@ -169,7 +169,7 @@ kubectl get nodes
 oci ce node-pool list --compartment-id "$TENANCY" --query 'data[*].{name:name,"k8s":"kubernetes-version"}'
 
 # All ingress hosts reachable
-for host in toolbox.junaid.guru ticketlist-api.junaid.guru; do
+for host in toolbox.junaid.guru directory.junaid.guru; do
   echo "$host: $(curl -s -o /dev/null -w '%{http_code}' -L -m 10 "https://$host/" 2>&1)"
 done
 
@@ -218,7 +218,7 @@ kubectl create secret docker-registry ocirsecret \
   --namespace=default
 
 # Copy to every namespace pulling from OCIR
-for ns in toolbox ticketlist-api-main ticketlist-api-develop redis; do
+for ns in toolbox dmozdb redis; do
   kubectl delete secret ocirsecret -n "$ns" --ignore-not-found
   kubectl get secret ocirsecret -n default -o yaml \
     | sed "s/namespace: default/namespace: $ns/" \
