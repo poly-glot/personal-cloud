@@ -6,7 +6,9 @@ Things future-me (or future-Claude) needs to know that aren't visible from readi
 
 ## OKE Kubernetes upgrade runbook
 
-Use this whenever bumping the cluster's Kubernetes version. Verified working on the v1.34.1 → v1.34.2 upgrade in April 2026, which initially failed in 4 different ways before settling.
+Use this whenever bumping the cluster's Kubernetes version. Verified working on the v1.34.1 → v1.34.2 upgrade in April 2026, which initially failed in 4 different ways before settling. Verified again on v1.35.2 → v1.36.1 on 2026-09-06 (which also moved node OS from Oracle Linux 8.10 to 9.8 — ~35 min wall clock, ~4 min ingress downtime).
+
+**There is no LTS in Kubernetes or OKE.** OKE supports three minors on a rolling window; upgrades are one minor at a time (`oci ce cluster list --query 'data[*]."available-kubernetes-upgrades"'` shows the only options). Take the latest patch of the next minor.
 
 ### Pre-flight checks (do these before running the workflow)
 
@@ -23,6 +25,8 @@ Use this whenever bumping the cluster's Kubernetes version. Verified working on 
    ```
    If empty, the node pool stage of the upgrade will fail with `Invalid index` (data source returns empty list). Replace `1.34.2` with the target.
 
+   **OS-jump trap:** `cluster.tf` picks the image with a *lexical* `reverse(sort(keys))[0]`, so `Oracle-Linux-9.x` beats `Oracle-Linux-8.x` regardless of build date. From 1.36.1 onward OKE ships both, and the picker silently chose OL 9.8 (cgroup v2, newer kernel). Decide this consciously: to hold the OS, tighten the regex to `Oracle-Linux-8.*aarch64.*OKE-${local.k8s_ver}-` and push that to main *before* running the workflow (the workflow applies from main).
+
 3. **Audit PodDisruptionBudgets**:
    ```bash
    kubectl get pdb -A
@@ -30,6 +34,7 @@ Use this whenever bumping the cluster's Kubernetes version. Verified working on 
    Any `minAvailable: N` where N >= deployment replicas means **drain will hang forever**. Either:
    - Convert to `maxUnavailable: 1`
    - Or scale the deployment to (N+1) replicas
+   - Or, if downtime is acceptable, leave the PDB alone and drain with `--disable-eviction` (uses delete instead of the eviction API, which bypasses PDBs). Used on the Sept 2026 cycle for `ticketlist-api-develop/app-v1` (minAvailable 1, 1 replica, lives in the ticketlist-api repo).
    - The OKE node pool eviction policy should already be `isForceDeleteAfterGraceDuration: true` (1h timeout); confirm with:
      ```bash
      oci ce node-pool get --node-pool-id $(oci ce node-pool list --compartment-id <tenancy> --query 'data[0].id' --raw-output) \
@@ -63,7 +68,7 @@ gh workflow run kubernetes-upgrade.yaml --repo poly-glot/personal-cloud --ref ma
 
 **The workflow does NOT cycle existing nodes.** It updates the node pool template (kubernetes_version + image) but existing VMs keep running their old kubelet/image until replaced. The workflow's `wait-for-nodes` step only checks that nodes are Ready (which they will be — on the OLD version). After the workflow's "successful" completion, you may still see old kubelets via `kubectl get nodes`.
 
-**The workflow often reports overall `failure` even when the upgrade worked.** Observed May 2026: the `Wait for Node Pool to be Ready` job died at its "Configure Kubectl" step with `Unexpected HTTP response: 404` (a transient kubeconfig fetch on the runner), which then **skipped all downstream jobs** (Apply Node Labels, Deploy Traefik, Update NLB, Verify). The two jobs that matter — `Update Kubernetes Version in Code` and `Deploy Infrastructure Changes` — had already succeeded, so the control plane + node pool template were correctly on the new version. Check the *individual job* conclusions, not just the overall red X, then do the manual node-cycling below.
+**The workflow often reports overall `failure` even when the upgrade worked.** Observed May 2026: the `Wait for Node Pool to be Ready` job died at its "Configure Kubectl" step with `Unexpected HTTP response: 404` (a transient kubeconfig fetch on the runner), which then **skipped all downstream jobs** (Apply Node Labels, Deploy Traefik, Update NLB, Verify). The two jobs that matter — `Update Kubernetes Version in Code` and `Deploy Infrastructure Changes` — had already succeeded, so the control plane + node pool template were correctly on the new version. Check the *individual job* conclusions, not just the overall red X, then do the manual node-cycling below. Same 404 again in Sept 2026 — treat it as expected.
 
 ### ⚠️ AD-pinning trap (this WILL bite you — it caused real downtime on the v1.34.2 → v1.35.2 cycle, May 2026)
 
@@ -100,16 +105,20 @@ oci ce node-pool update --node-pool-id "$NODE_POOL_ID" --placement-configs file:
 
 Run after the workflow succeeds. **One node at a time** for minimum downtime. **Pin placement to AD-1 first (see AD-pinning trap above).**
 
+**Order that minimises Traefik downtime:** cycle the `worker` node first. When its replacement is Ready, label the replacement `role=main` *before* draining the old `main` node — Traefik and Redis master then reschedule onto it immediately instead of sitting Pending until the second replacement is labelled. Label the second replacement `role=worker` when it arrives.
+
 ```bash
 TENANCY=ocid1.tenancy.oc1..aaaaaaaaje52yql3f2nlli7zur5fvweb3xizhkmjbx65eocerfkqge7hkyaq
 NODE_POOL_ID=$(oci ce node-pool list --compartment-id "$TENANCY" --query 'data[0].id' --raw-output)
 
 # For each node still on the old version:
 NODE_NAME=10.0.1.X    # kubectl name (the InternalIP)
-NODE_OCID=ocid1.instance.oc1.uk-london-1.XXX  # from `oci ce node-pool get`
+NODE_OCID=$(oci ce node-pool get --node-pool-id "$NODE_POOL_ID" \
+  --query "data.nodes[?\"private-ip\"=='$NODE_NAME' && \"lifecycle-state\"=='ACTIVE'].id | [0]" --raw-output)
 
 kubectl cordon "$NODE_NAME"
-kubectl drain "$NODE_NAME" --ignore-daemonsets --delete-emptydir-data --grace-period=60 --timeout=240s
+# --disable-eviction only if a PDB would block and downtime is acceptable (see pre-flight 3)
+kubectl drain "$NODE_NAME" --ignore-daemonsets --delete-emptydir-data --grace-period=60 --timeout=300s
 
 # CRITICAL: --is-decrement-size false. Default decrements pool size, no replacement created.
 oci ce node-pool delete-node \
@@ -130,11 +139,18 @@ When old nodes are deleted, NLB backend IPs still point at the dead nodes. **All
 gh workflow run terraform-network-loadbalancer.yaml --repo poly-glot/personal-cloud --ref main
 ```
 
-The 03 stack uses `local.main_node_ip = local.active_nodes[0].private_ip` to derive backend IPs. Re-applying picks up the new node IP and updates `junaid-backend-set` (port 32080 → Traefik HTTP) and `junaid-backend-set-https` (port 32443 → Traefik HTTPS).
+The 03 stack uses `local.main_node_ip = local.active_nodes[0].private_ip` to derive backend IPs. Re-applying picks up the new node IP and updates `junaid-backend-set` (port 32080 → Traefik HTTP) and `junaid-backend-set-https` (port 32443 → Traefik HTTPS). Traefik's Service is NodePort with the default `externalTrafficPolicy: Cluster`, so any ACTIVE node works as the backend — it does not have to be the `role=main` node. You can run this as soon as the *first* replacement is ACTIVE; no need to wait for the second.
+
+Check what the NLB actually points at (there are three NLBs in the tenancy; only `junaid-nlb` is terraform-managed — the two `ticketlist/ticketd-*-nlb` ones are created by `Service type=LoadBalancer` and the OCI cloud controller keeps their backends current on its own):
+
+```bash
+NLB=$(oci nlb network-load-balancer list --compartment-id "$TENANCY" --all --query 'data.items[?"display-name"==`junaid-nlb`].id | [0]' --raw-output)
+oci nlb backend-set list --network-load-balancer-id "$NLB" --all --query 'data.items[*].{name:name,backends:join(`, `,backends[*].name)}' --output table
+```
 
 ### Post-cycle: ensure node labels
 
-Traefik has `nodeSelector: role=main` and Redis master has `nodeAffinity` on `role: worker`. New nodes don't get these labels automatically. The kubernetes-upgrade workflow has a `label-nodes` job that runs `deployment/node-labeler/`, but if the workflow failed mid-flight you may need to label manually:
+Traefik has a hard `nodeSelector: role=main`; Redis master has a *preferred* (weight 100) affinity for `role=main`, so it follows Traefik. New nodes don't get these labels automatically. The kubernetes-upgrade workflow has a `label-nodes` job that runs `deployment/node-labeler/` (lowest lexically-sorted node name → `main`, rest → `worker`), but if the workflow failed mid-flight you may need to label manually. A later labeler run can flip which node is `main`; that does not evict running pods (nodeSelector is only enforced at scheduling time), it only changes where Traefik lands on its next restart.
 
 ```bash
 kubectl label node 10.0.1.X role=main --overwrite
@@ -158,6 +174,8 @@ done
 # Pods all Running
 kubectl get pods -A --no-headers | awk '$4!="Running"&&$4!="Completed"'
 ```
+
+Fresh nodes show scary-looking transient events for the first ~2 minutes while daemonsets register: `FailedCreatePodSandBox … /run/flannel/subnet.env: no such file`, `CSINode … does not contain driver blockvolume.csi.oraclecloud.com`, and `FailedAttachVolume … device attribute /dev/oracleoci/oraclevdb is already in use` (two PVCs attaching at once). All self-heal. Don't act on them before the 3-minute mark.
 
 ### Estimated downtime
 
@@ -241,7 +259,7 @@ Stale MySQL admin creds live in GSM as `db-admin-user` / `db-admin-pass`. OCI tf
 
 - **Block volume minimum**: 50 GB. Kubernetes PVCs requesting `1Gi` get a 50 GiB volume. Cannot shrink.
 - **Volume backup billing**: orphan backups from deleted boot volumes still cost ~$0.018/GB·mo on `unique-size-in-gbs`. The bronze policy backup naming `Auto-backup ... via policy: bronze` indicates auto-attached policy from console (not terraform). Check periodically.
-- **NLB**: 1 included in Always Free. Second NLB ≈ $17/mo. Consolidated to one (`junaid-nlb`) handling 80, 443, 3306, 33060.
+- **NLB**: 1 included in Always Free. Second NLB ≈ $17/mo. Consolidated to one (`junaid-nlb`) handling 80, 443, 3306, 33060. **As of Sept 2026 there are three again**: `ticketlist/ticketd-read-nlb` and `ticketlist/ticketd-leader-nlb`, auto-created by `Service type=LoadBalancer` in the `ticketlist` namespace. Check whether both are needed.
 - **NAT gateways**: free. Multiple stale gateways from old `oke-vcn-quick-*` VCNs are harmless cost-wise.
 - **OCI auth tokens**: 2 per user max. Check quota before generating.
 - **Customer Secret Keys** (S3-compat for OCI Object Storage): also 2 per user max. Used for terraform tfstate backend.
