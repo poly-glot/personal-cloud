@@ -11,7 +11,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: labeler
-          image: bitnami/kubectl:latest
+          image: docker.io/bitnami/kubectl:latest
           command:
             - /bin/bash
             - -c
