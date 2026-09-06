@@ -27,6 +27,8 @@ Use this whenever bumping the cluster's Kubernetes version. Verified working on 
 
    **OS-jump trap:** `cluster.tf` picks the image with a *lexical* `reverse(sort(keys))[0]`, so `Oracle-Linux-9.x` beats `Oracle-Linux-8.x` regardless of build date. From 1.36.1 onward OKE ships both, and the picker silently chose OL 9.8 (cgroup v2, newer kernel). Decide this consciously: to hold the OS, tighten the regex to `Oracle-Linux-8.*aarch64.*OKE-${local.k8s_ver}-` and push that to main *before* running the workflow (the workflow applies from main).
 
+   **OL 9 enforces registry short-name mode.** Namespaced image references without a registry host (`bitnami/kubectl:latest`, `curlimages/curl`) fail on OL 9 nodes with `short name mode is enforcing, but image name … returns ambiguous list` → `ImagePullBackOff`, and the pod never starts. OL 8 resolved these to Docker Hub silently. Single-name images (`busybox:latest`, `redis:7`) still work because OL 9 ships an alias table for the popular ones — that is why Traefik's `volume-permissions` init container survived. Qualify every image with its registry (`docker.io/…`). Verified 2026-09-06: `deployment/node-labeler/job.yaml` uses `bitnami/kubectl:latest`, so the workflow's `label-nodes` job is broken on OL 9 nodes until that line is qualified (and check the tag still exists — Bitnami moved most free images to `bitnamilegacy/` in 2025).
+
 3. **Audit PodDisruptionBudgets**:
    ```bash
    kubectl get pdb -A
